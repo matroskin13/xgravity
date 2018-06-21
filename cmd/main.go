@@ -29,12 +29,12 @@ func main() {
 
 	for _, file := range packageFiles {
 		if !file.IsDir() {
-			b, err := ioutil.ReadFile("./sandbox/main.go")
+			b, err := ioutil.ReadFile(path.Join(pathPackage, file.Name()))
 			if err != nil {
 				log.Fatal(err)
 			}
 
-			e, err := xgravity.GetEntities("sandbox/main.go", b)
+			e, err := xgravity.GetEntities(path.Join(pathPackage, file.Name()), b)
 			if err != nil {
 				log.Fatal(err)
 			}
