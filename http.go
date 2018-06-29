@@ -22,7 +22,7 @@ func GetParam(url string, offset int) int {
 
 	digit := items[offset]
 
-	if v, err := strconv.Atoi(digit); err != nil {
+	if v, err := strconv.Atoi(digit); err == nil {
 		return v
 	}
 

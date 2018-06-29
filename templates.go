@@ -11,54 +11,68 @@ type HTTPTemplateData struct {
 	InterfaceName string
 }
 
-func GetHTTPTemplate(parentPackage string, entities []Entity) []byte {
+func GetEndpointTemplate(iName string, endpoint *Endpoint) []byte {
+	str := `e.{{.method}}("{{.path}}", func(c echo.Context) error {
+    {{.iName}}.{{.methodName}}(1)
+	return c.String(404, "not found")
+})`
+	t := template.Must(template.New("http_endpoint").Parse(str))
+
+	var buf bytes.Buffer
+
+	t.Execute(&buf, map[string]interface{}{
+		"method":     endpoint.Method,
+		"path":       endpoint.Path,
+		"iName":      iName,
+		"methodName": endpoint.Name,
+	})
+
+	return buf.Bytes()
+}
+
+func GetHTTPTemplate(parentPackage string, entities []Entity) ([]byte, error) {
 	var buf bytes.Buffer
 
 	funcs := template.FuncMap{
 		"toLower": strings.ToLower,
 	}
 
-	template.Must(template.New("http_template").Funcs(funcs).Parse(`package api
+	var sEndpoints []string
+
+	for _, entity := range entities {
+		for _, endpoint := range entity.Endpoints {
+			sEndpoints = append(
+				sEndpoints,
+				string(GetEndpointTemplate("entity"+entity.Name, &endpoint)),
+			)
+		}
+	}
+
+	t := template.Must(template.New("http_template").Funcs(funcs).Parse(`package api
 
 import (
     "errors"
 	"net/http"
-    // parent "{{.parentPackage}}"
 
+
+    // parent "{{.parentPackage}}"
+	"github.com/labstack/echo"
     "github.com/matroskin13/xgravity"
 )
 
 func Start({{range .entities}}entity{{.Name}} {{.Name}}Api,{{end}} port string) error {
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		id := xgravity.GetParam(r.URL.Path, 1)
+	e := echo.New()
 
-		{{range $entity := .entities}}
-			{{range $entity.Methods}}
-				{{ if (eq . "get")}}
-					if r.URL.Path == "/{{$entity.Name | toLower}}" && r.Method == "GET" && id > 0 {
-						advert, err := entity{{$entity.Name}}.get{{$entity.Name}}ById(id)
-						if err != nil {
-							xgravity.ErrorResponse(w, err)
-							return
-						}
+	{{.sEndpoints}}
 
-						xgravity.SuccessResponse(w, advert)
+	return e.Start(":"+port)
+}	`))
 
-						return
-					}
-				{{ end }}
-			{{end}}
-		{{end}}
-
-		xgravity.ErrorResponse(w, errors.New("not found"))
-	})
-	http.ListenAndServe(":"+port, nil)
-}	`)).Execute(&buf, map[string]interface{}{
+	t.Execute(&buf, map[string]interface{}{
 		"entities":      entities,
 		"parentPackage": parentPackage,
+		"sEndpoints":    strings.Join(sEndpoints, ""),
 	})
 
-	b, _ := format.Source(buf.Bytes())
-
-	return b
+	return format.Source(buf.Bytes())
 }

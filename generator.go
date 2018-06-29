@@ -34,7 +34,7 @@ func CreateApiPackage(currentPackage string, entities []Entity) (Files, error) {
 		}
 	}
 
-	for _, decl := range GenerateInterfaces("parent", entities) {
+	for _, decl := range GenerateInterfaces(entities) {
 		f.Decls = append(f.Decls, decl)
 	}
 
@@ -42,7 +42,10 @@ func CreateApiPackage(currentPackage string, entities []Entity) (Files, error) {
 
 	printer.Fprint(&buf, fset, f)
 
-	httpBytes := GetHTTPTemplate(currentPackage, entities)
+	httpBytes, err := GetHTTPTemplate(currentPackage, entities)
+	if err != nil {
+		return nil, err
+	}
 
 	files["api.go"] = buf.Bytes()
 	files["http.go"] = httpBytes
@@ -54,68 +57,29 @@ func createEmptyFile(packageName string) string {
 	return "package " + packageName + "\r\n\r\nimport()"
 }
 
-func GenerateInterfaces(packageName string, entities []Entity) []*ast.GenDecl {
+func GenerateInterfaces(entities []Entity) []*ast.GenDecl {
 	var decls []*ast.GenDecl
 
 	for _, entity := range entities {
 		var methods []*ast.Field
 
-		for _, method := range entity.Methods {
-			switch method {
-			case MethodGetEntity:
-				methods = append(methods, &ast.Field{
-					Names: []*ast.Ident{
-						{
-							Name: "get" + entity.Name + "ById",
-							Obj:  ast.NewObj(ast.Fun, "get"+entity.Name+"ById"),
-						},
+		for _, endpoint := range entity.Endpoints {
+			methods = append(methods, &ast.Field{
+				Names: []*ast.Ident{
+					{
+						Name: endpoint.Name,
+						Obj:  ast.NewObj(ast.Fun, endpoint.Name),
 					},
-					Type: &ast.FuncType{
-						Params: &ast.FieldList{
-							List: []*ast.Field{
-								/*{
-									Names: []*ast.Ident{
-										{
-											Name: "entity",
-											Obj:  ast.NewObj(ast.Fun, "entity"),
-										},
-									},
-									Type: &ast.StarExpr{
-										X: &ast.Ident{
-											Name: packageName + "." + entity.Name,
-										},
-									},
-								},*/
-
-								{
-									Names: []*ast.Ident{
-										{Name: "id"},
-									},
-									Type: &ast.Ident{
-										Name: "int",
-									},
-								},
-							},
-						},
-						Results: &ast.FieldList{
-							List: []*ast.Field{
-								{
-									Type: &ast.StarExpr{
-										X: &ast.Ident{
-											Name: packageName + "." + entity.Name,
-										},
-									},
-								},
-								{
-									Type: &ast.Ident{
-										Name: "error",
-									},
-								},
-							},
-						},
+				},
+				Type: &ast.FuncType{
+					Params: &ast.FieldList{
+						List: endpoint.Input,
 					},
-				})
-			}
+					Results: &ast.FieldList{
+						List: endpoint.Result,
+					},
+				},
+			})
 		}
 
 		interfaceName := entity.Name + "Api"

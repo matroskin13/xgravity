@@ -10,14 +10,19 @@ import (
 	"github.com/matroskin13/xgravity"
 	"path"
 	"strings"
+	"flag"
 )
 
 func main() {
+	output := flag.String("o", "api", "output dir")
+
+	flag.Parse()
+
 	p, _ := os.Getwd()
 	pathPackage := p
 
-	if len(os.Args) > 1 {
-		pathPackage = path.Join(p, os.Args[1])
+	if len(flag.Args()) > 0 {
+		pathPackage = path.Join(p, flag.Args()[0])
 	}
 
 	packageFiles, err := ioutil.ReadDir(pathPackage)
@@ -27,14 +32,17 @@ func main() {
 
 	var entites []xgravity.Entity
 
+	gopath := build.Default.GOPATH
+	packageFullName := strings.Replace(pathPackage, gopath+"/src/", "", 1)
+
 	for _, file := range packageFiles {
-		if !file.IsDir() {
+		if !file.IsDir() && path.Ext(file.Name()) == ".go" {
 			b, err := ioutil.ReadFile(path.Join(pathPackage, file.Name()))
 			if err != nil {
 				log.Fatal(err)
 			}
 
-			e, err := xgravity.GetEntities(path.Join(pathPackage, file.Name()), b)
+			e, err := xgravity.GetEntities(packageFullName, path.Join(pathPackage, file.Name()), b)
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -43,21 +51,15 @@ func main() {
 		}
 	}
 
-	gopath := os.Getenv("GOPATH")
-	if gopath == "" {
-		gopath = build.Default.GOPATH
-	}
-
-	packageFullName := strings.Replace(pathPackage, gopath+"/src/", "", 1)
 	files, err := xgravity.CreateApiPackage(packageFullName, entites)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	os.Mkdir("api", os.ModePerm)
+	os.Mkdir(*output, os.ModePerm)
 
 	for name, content := range files {
-		err = ioutil.WriteFile("./api/"+name, content, os.ModePerm)
+		err = ioutil.WriteFile(*output+"/"+name, content, os.ModePerm)
 		if err != nil {
 			log.Fatal(err)
 		}
